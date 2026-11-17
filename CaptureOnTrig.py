@@ -13,12 +13,15 @@ import time
 import datetime
 import os
 from pathlib import Path
+from glob import glob
 import msvcrt
 import pyvisa
 
 
 DEFAULT_IP_ADDRESS = "192.168.1.123"
-DEFAULT_SAVE_DIRECTORY = str(Path.home() / "Desktop/CaptureOnTrig")
+# Find user desktop one level down from home [~/* /Desktop] as optional path to account for OneDrive
+DESKTOP_PATH = glob(os.path.expanduser("~\\*\\Desktop"))
+DEFAULT_SAVE_DIRECTORY = os.path.join(DESKTOP_PATH[0] if DESKTOP_PATH else os.path.expanduser("~\\Desktop"), "CaptureOnTrig")
 POLL_INTERVAL_SECONDS = 0.05
 RIGOL_POLL_INTERVAL_SECONDS = 0.01
 ARM_SETTLE_SECONDS = 0.5
@@ -343,11 +346,14 @@ def main():
     operation = "opening the VISA resource"
     try:
         visa_resource = get_visa_resource()
-        save_directory = input(
-            f"Enter image directory (default {DEFAULT_SAVE_DIRECTORY}): "
+        user_path_input = input(
+            f"Enter data path (Default = Desktop)   'd' for default: "
         ).strip()
-        if not save_directory:
-            save_directory = DEFAULT_SAVE_DIRECTORY
+        save_directory = (
+            DEFAULT_SAVE_DIRECTORY
+            if user_path_input.lower() == "d" or not user_path_input
+            else user_path_input
+        )
         trigger_timeout_seconds = get_trigger_timeout()
         os.makedirs(save_directory, exist_ok=True)
 
@@ -383,7 +389,7 @@ def main():
                 scope, trigger_timeout_seconds, capture_number + 1
             )
             if trigger_result is False:
-                print("\nStopped by user.")
+                print("Stopped by user.")
                 break
             if trigger_result is None:
                 print(
@@ -417,7 +423,7 @@ def main():
                 f"(PNG transfer {transfer_seconds:.1f} seconds)"
             )
     except KeyboardInterrupt:
-        print("\nStopped by user.")
+        print("Stopped by user.")
     except pyvisa.errors.VisaIOError as error:
         print(f"Capture stopped while {operation}: {error}")
     except (OSError, ValueError) as error:

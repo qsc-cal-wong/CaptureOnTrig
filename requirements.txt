@@ -1,3 +1,2 @@
 pyvisa
 pyvisa-py
-keyboard
