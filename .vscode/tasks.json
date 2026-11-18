@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Smoke test distribution executable",
+			"type": "shell",
+			"command": "Set-Location .\\dist; $output = @('INVALID::RESOURCE', '..\\captures', '0') | .\\CaptureOnTrig.exe 2>&1; $exitCode = $LASTEXITCODE; $output | ForEach-Object { Write-Output $_ }; $text = $output -join ' '; if ($exitCode -ne 0 -or $text -notmatch 'Enter the scope IP address' -or $text -notmatch 'Enter data path' -or $text -notmatch 'Enter trigger wait timeout' -or $text -notmatch 'VI_ERROR_INV_RSRC_NAME' -or $text -match 'Traceback|lost sys.stdin') { throw 'Distribution smoke test failed' }; Write-Output 'PASS: startup prompts and bundled VISA backend work; deliberately invalid resource rejected as expected.'",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}
