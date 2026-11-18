@@ -18,7 +18,7 @@ import msvcrt
 import pyvisa
 
 
-DEFAULT_IP_ADDRESS = "192.168.1.123"
+DEFAULT_IP_ADDRESS = "10.99.100.56"
 # Find user desktop one level down from home [~/* /Desktop] as optional path to account for OneDrive
 DESKTOP_PATH = glob(os.path.expanduser("~\\*\\Desktop"))
 DEFAULT_SAVE_DIRECTORY = os.path.join(DESKTOP_PATH[0] if DESKTOP_PATH else os.path.expanduser("~\\Desktop"), "CaptureOnTrig")
