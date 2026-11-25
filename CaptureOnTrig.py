@@ -4,21 +4,33 @@ Enter a VISA resource (an IP address is expanded to a TCPIP INSTR resource).
 The program preserves the trigger source and level, arms one acquisition at a
 time, and saves each completed capture on the user's desktop by default.
 
-Tested with Rigol DS1000Z, Tektronix DPO4034 and MSO58, and LeCroy 
-WaveRunner 8108HD.
+Before starting:
+1. Connect the scope by Ethernet and note its IP address.
+2. Use the scope's front panel to set up channels, timebase, trigger source,
+   and trigger level for the event you want to capture.
+3. Enter the scope IP address, save folder, and trigger wait timeout when
+   prompted. The program selects normal triggering and arms acquisitions.
+
+Press Enter to continue or Q then Enter to quit before connecting.
+During capture, press Q or Ctrl+C to stop. The scope connection is released,
+then the program waits for Enter before closing so you can review the output.
+
+Tested on Rigol DS1000Z, WaveRunner 8108HD, LeCroy WaveRunner 8108HD,
+Tektronix DPO4054B, MSO54, and MSO68B with Ethernet.
 
 """
 
 import time
 import datetime
 import os
+import re
 from pathlib import Path
 from glob import glob
 import msvcrt
 import pyvisa
 
 
-DEFAULT_IP_ADDRESS = "10.99.100.56"
+DEFAULT_IP_ADDRESS = "10.99.100.76"
 # Find user desktop one level down from home [~/* /Desktop] as optional path to account for OneDrive
 DESKTOP_PATH = glob(os.path.expanduser("~\\*\\Desktop"))
 DEFAULT_SAVE_DIRECTORY = os.path.join(DESKTOP_PATH[0] if DESKTOP_PATH else os.path.expanduser("~\\Desktop"), "CaptureOnTrig")
@@ -120,16 +132,18 @@ class RigolScope(ScopeAdapter):
 
 
 class TektronixScope(ScopeAdapter):
-    """Tektronix DPO4 and MSO5 display capture using native PNG data."""
+    """Tektronix DPO4 and MSO5/6 display capture using native PNG data."""
 
     def __init__(self, instrument, idn):
         ScopeAdapter.__init__(self, instrument)
-        self.is_mso5 = "MSO58" in idn.upper() or "MSO5" in idn.upper()
+        model = idn.split(",")[1].strip().upper()
+        self.uses_image_file = model.startswith(("MSO5", "MSO6"))
 
     def configure(self):
+        self.instrument.write("HEADer OFF")
         self.instrument.write("TRIGger:A:MODe NORMal")
         self.instrument.write("ACQuire:STOPAfter SEQuence")
-        if not self.is_mso5:
+        if not self.uses_image_file:
             self.instrument.write("SAVE:IMAGe:FILEFormat PNG")
             self.instrument.write("HARDCOPY:INKSAVER OFF")
             self.instrument.write("HARDCOPY:PORT ETHERNET")
@@ -141,7 +155,7 @@ class TektronixScope(ScopeAdapter):
         return self.instrument.query("ACQuire:STATE?").strip() == "0"
 
     def capture_image(self):
-        if self.is_mso5:
+        if self.uses_image_file:
             self.instrument.write(
                 'SAVE:IMAGe "' + TEKTRONIX_TEMP_IMAGE + '"'
             )
@@ -239,11 +253,9 @@ def create_scope_adapter(instrument, idn):
     if "RIGOL" in upper_idn:
         return RigolScope(instrument)
     if "TEKTRONIX" in upper_idn:
-        if (
-            "DPO4034" in upper_idn
-            or "MSO58" in upper_idn
-            or "MSO5" in upper_idn
-        ):
+        fields = upper_idn.split(",")
+        model = fields[1].strip() if len(fields) > 1 else ""
+        if re.fullmatch(r"(?:DPO4\d{3}B?|MSO[56][468]B?)", model):
             return TektronixScope(instrument, idn)
         raise ValueError(f"Unsupported Tektronix model: {idn}")
     if "LECROY" in upper_idn or "TELEDYNE" in upper_idn:
@@ -345,6 +357,17 @@ def main():
     scope = None
     operation = "opening the VISA resource"
     try:
+        print(__doc__)
+        while True:
+            response = input(
+                "Press Enter to continue, or Q then Enter to quit: "
+            ).strip().lower()
+            if response == "q":
+                print("Stopped by user.")
+                return
+            if not response:
+                break
+            print("Press Enter to continue, or enter Q to quit.")
         visa_resource = get_visa_resource()
         user_path_input = input(
             f"Enter data path (Default = Desktop)   'd' for default: "
@@ -424,6 +447,8 @@ def main():
             )
     except KeyboardInterrupt:
         print("Stopped by user.")
+    except EOFError:
+        print("Capture stopped: standard input was closed.")
     except pyvisa.errors.VisaIOError as error:
         print(f"Capture stopped while {operation}: {error}")
     except (OSError, ValueError) as error:
@@ -438,6 +463,10 @@ def main():
             instrument.close()
         if resource_manager is not None:
             resource_manager.close()
+        try:
+            input("Press Enter to exit and close this window...")
+        except (EOFError, KeyboardInterrupt):
+            print("Exit confirmation interrupted; exiting.")
 
 
 if __name__ == "__main__":
